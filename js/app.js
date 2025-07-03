@@ -1,6 +1,6 @@
 // === CONFIGURAÇÕES === //
 const CONFIG = {
-    PIN: '1234', // MUDE PARA O CÓDIGO QUE VOCÊS QUISEREM!
+    PIN: 'tecativo', // MUDE PARA O CÓDIGO QUE VOCÊS QUISEREM!
     IMGBB_API_KEY: 'bcfb741e6d085a2d8e0df6eafc8d2101',
     JSONBIN_ID: '6865e4158960c979a5b625d3', // Seu Bin ID configurado!
     JSONBIN_API_KEY: '$2a$10$j9SXkX3gfR.Vq0LD8WmKVe9V1LPsR7VjSS12QrO5vd/WSJJ.R/DtS'

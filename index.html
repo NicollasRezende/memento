@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nossas Memórias 💕</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <!-- Tela de Login -->
+    <div id="loginScreen" class="login-screen active">
+        <div class="login-container">
+            <h1>Entre no nosso mundo 💝</h1>
+            <p>Digite o código secreto do nosso amor</p>
+            <input type="password" id="pinInput" placeholder="••••" maxlength="4">
+            <button id="loginBtn">Entrar</button>
+        </div>
+    </div>
+
+    <!-- Aplicação Principal -->
+    <div id="app" class="app">
+        <!-- Header -->
+        <header class="header">
+            <nav class="nav">
+                <h1 class="logo">Nossas Memórias 💕</h1>
+                <div class="nav-links">
+                    <a href="#photos" class="nav-link active" data-section="photos">
+                        <span class="icon">📸</span> Fotos
+                    </a>
+                    <a href="#videos" class="nav-link" data-section="videos">
+                        <span class="icon">🎥</span> Vídeos
+                    </a>
+                    <a href="#notes" class="nav-link" data-section="notes">
+                        <span class="icon">💝</span> Recadinhos
+                    </a>
+                    <button id="logoutBtn" class="logout-btn">Sair</button>
+                </div>
+            </nav>
+        </header>
+
+        <!-- Seção de Fotos -->
+        <section id="photos" class="section active">
+            <div class="section-header">
+                <h2>Nossos Momentos 📸</h2>
+                <button class="add-btn" data-type="photo">
+                    <span>+</span> Adicionar Foto
+                </button>
+            </div>
+            
+            <div class="upload-area" id="photoUploadArea" style="display: none;">
+                <div class="upload-box">
+                    <p>Arraste uma foto aqui ou clique para selecionar</p>
+                    <input type="file" id="photoInput" accept="image/*" hidden>
+                    <button class="select-btn" onclick="document.getElementById('photoInput').click()">
+                        Escolher Foto
+                    </button>
+                </div>
+            </div>
+
+            <div class="gallery masonry" id="photoGallery">
+                <!-- Fotos serão carregadas aqui -->
+            </div>
+        </section>
+
+        <!-- Seção de Vídeos -->
+        <section id="videos" class="section">
+            <div class="section-header">
+                <h2>Nossos Vídeos 🎥</h2>
+                <button class="add-btn" data-type="video">
+                    <span>+</span> Adicionar Vídeo
+                </button>
+            </div>
+
+            <div class="upload-area" id="videoUploadArea" style="display: none;">
+                <div class="upload-box">
+                    <p>Adicione o link do YouTube ou arraste um vídeo</p>
+                    <input type="text" id="videoUrlInput" placeholder="https://youtube.com/...">
+                    <button class="select-btn" id="addVideoBtn">Adicionar</button>
+                </div>
+            </div>
+
+            <div class="video-gallery" id="videoGallery">
+                <!-- Vídeos serão carregados aqui -->
+            </div>
+        </section>
+
+        <!-- Seção de Recadinhos -->
+        <section id="notes" class="section">
+            <div class="section-header">
+                <h2>Nossos Recadinhos 💝</h2>
+                <button class="add-btn" data-type="note">
+                    <span>+</span> Novo Recadinho
+                </button>
+            </div>
+
+            <div class="notes-board" id="notesBoard">
+                <!-- Post-its serão carregados aqui -->
+            </div>
+        </section>
+    </div>
+
+    <!-- Modal para adicionar recadinho -->
+    <div id="noteModal" class="modal">
+        <div class="modal-content">
+            <h3>Deixe um recadinho 💕</h3>
+            <textarea id="noteText" placeholder="Escreva algo especial..."></textarea>
+            <div class="color-picker">
+                <div class="color" data-color="#FFE5B4" style="background: #FFE5B4;"></div>
+                <div class="color" data-color="#FFB6C1" style="background: #FFB6C1;"></div>
+                <div class="color" data-color="#E6E6FA" style="background: #E6E6FA;"></div>
+                <div class="color" data-color="#98FB98" style="background: #98FB98;"></div>
+                <div class="color" data-color="#87CEEB" style="background: #87CEEB;"></div>
+            </div>
+            <div class="modal-actions">
+                <button id="saveNoteBtn">Salvar</button>
+                <button id="cancelNoteBtn">Cancelar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Lightbox para fotos -->
+    <div id="lightbox" class="lightbox">
+        <span class="close">&times;</span>
+        <img id="lightboxImg" src="" alt="">
+    </div>
+
+    <!-- Loading -->
+    <div id="loading" class="loading">
+        <div class="heart-loader">
+            <div class="heart"></div>
+            <p>Carregando com amor...</p>
+        </div>
+    </div>
+
+    <script src="js/app.js"></script>
+</body>
+</html>

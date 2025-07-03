@@ -64,16 +64,7 @@ const Storage = (() => {
 // === MÓDULO DE UPLOAD === //
 const Upload = (() => {
     const uploadToImgBB = async (file) => {
-        // Mostra loading
-        UI.showLoading();
-        
         try {
-            // Para demonstração, vou simular um upload
-            // Na versão real, você precisa de uma chave API do ImgBB
-            // Cadastre-se em https://imgbb.com/ para obter uma chave gratuita
-            
-            // Código real seria:
-
             const formData = new FormData();
             formData.append('image', file);
             
@@ -83,20 +74,49 @@ const Upload = (() => {
             });
             
             const data = await response.json();
+            
             if (data.success) {
                 return data.data.url;
+            } else {
+                throw new Error('Upload falhou');
             }
-            
         } catch (error) {
-            UI.hideLoading();
-            alert('Erro ao fazer upload. Tente novamente!');
             console.error('Upload error:', error);
-            return null;
+            throw error;
         }
     };
     
+    const uploadMultipleImages = async (files, onProgress) => {
+        const results = [];
+        const total = files.length;
+        
+        for (let i = 0; i < files.length; i++) {
+            try {
+                if (onProgress) {
+                    onProgress(i + 1, total, files[i].name);
+                }
+                
+                const url = await uploadToImgBB(files[i]);
+                results.push({
+                    success: true,
+                    url: url,
+                    file: files[i]
+                });
+            } catch (error) {
+                results.push({
+                    success: false,
+                    error: error.message,
+                    file: files[i]
+                });
+            }
+        }
+        
+        return results;
+    };
+    
     return {
-        uploadImage: uploadToImgBB
+        uploadImage: uploadToImgBB,
+        uploadMultiple: uploadMultipleImages
     };
 })();
 
@@ -104,6 +124,13 @@ const Upload = (() => {
 const UI = (() => {
     let currentSection = 'photos';
     let selectedNoteColor = '#FFE5B4';
+    let pendingFiles = []; // Armazenar arquivos pendentes
+    let editMode = {
+        photos: false,
+        videos: false,
+        notes: false
+    };
+    let itemToDelete = null;
     
     return {
         init() {
@@ -153,19 +180,62 @@ const UI = (() => {
             const photoUploadArea = document.getElementById('photoUploadArea');
             
             photoInput.addEventListener('change', async (e) => {
-                const file = e.target.files[0];
-                if (file && file.type.startsWith('image/')) {
-                    const url = await Upload.uploadImage(file);
-                    if (url) {
-                        const photo = {
-                            id: Date.now(),
-                            url: url,
-                            date: new Date().toLocaleDateString('pt-BR')
-                        };
-                        Storage.add(CONFIG.STORAGE_KEYS.PHOTOS, photo);
+                const files = Array.from(e.target.files);
+                if (files.length === 0) return;
+                
+                // Filtrar apenas imagens
+                const imageFiles = files.filter(file => file.type.startsWith('image/'));
+                
+                if (imageFiles.length > 0) {
+                    // Mostrar preview
+                    UI.showImagePreview(imageFiles);
+                    
+                    // Adicionar botão de upload
+                    const previewContainer = document.getElementById('uploadPreview');
+                    const uploadBtn = document.createElement('button');
+                    uploadBtn.className = 'select-btn';
+                    uploadBtn.style.marginTop = '1rem';
+                    uploadBtn.textContent = `Enviar ${imageFiles.length} foto(s)`;
+                    uploadBtn.onclick = async () => {
+                        uploadBtn.disabled = true;
+                        uploadBtn.textContent = 'Enviando...';
+                        
+                        UI.showLoadingWithProgress(`Preparando upload de ${pendingFiles.length} imagem(ns)...`);
+                        
+                        const results = await Upload.uploadMultiple(pendingFiles, (current, total, fileName) => {
+                            UI.showLoadingWithProgress(`Enviando ${fileName} (${current}/${total})...`);
+                        });
+                        
+                        // Processar resultados
+                        const successfulUploads = results.filter(r => r.success);
+                        const failedUploads = results.filter(r => !r.success);
+                        
+                        // Adicionar fotos bem-sucedidas
+                        successfulUploads.forEach(result => {
+                            const photo = {
+                                id: Date.now() + Math.random(),
+                                url: result.url,
+                                date: new Date().toLocaleDateString('pt-BR')
+                            };
+                            Storage.add(CONFIG.STORAGE_KEYS.PHOTOS, photo);
+                        });
+                        
+                        UI.hideLoading();
+                        
+                        // Mostrar resultado
+                        if (failedUploads.length > 0) {
+                            alert(`${successfulUploads.length} foto(s) enviada(s) com sucesso!\n${failedUploads.length} foto(s) falharam.`);
+                        } else {
+                            UI.showSuccess(`${successfulUploads.length} foto(s) adicionada(s) com sucesso! 💕`);
+                        }
+                        
                         this.renderPhotos();
                         photoUploadArea.style.display = 'none';
-                    }
+                        photoInput.value = ''; // Limpar input
+                        previewContainer.innerHTML = ''; // Limpar preview
+                        pendingFiles = []; // Limpar arquivos pendentes
+                    };
+                    previewContainer.appendChild(uploadBtn);
                 }
             });
             
@@ -185,19 +255,58 @@ const UI = (() => {
                 e.preventDefault();
                 uploadBox.classList.remove('drag-over');
                 
-                const file = e.dataTransfer.files[0];
-                if (file && file.type.startsWith('image/')) {
-                    const url = await Upload.uploadImage(file);
-                    if (url) {
-                        const photo = {
-                            id: Date.now(),
-                            url: url,
-                            date: new Date().toLocaleDateString('pt-BR')
-                        };
-                        Storage.add(CONFIG.STORAGE_KEYS.PHOTOS, photo);
+                const files = Array.from(e.dataTransfer.files);
+                const imageFiles = files.filter(file => file.type.startsWith('image/'));
+                
+                if (imageFiles.length > 0) {
+                    // Mostrar preview
+                    UI.showImagePreview(imageFiles);
+                    
+                    // Adicionar botão de upload
+                    const previewContainer = document.getElementById('uploadPreview');
+                    const uploadBtn = document.createElement('button');
+                    uploadBtn.className = 'select-btn';
+                    uploadBtn.style.marginTop = '1rem';
+                    uploadBtn.textContent = `Enviar ${imageFiles.length} foto(s)`;
+                    uploadBtn.onclick = async () => {
+                        uploadBtn.disabled = true;
+                        uploadBtn.textContent = 'Enviando...';
+                        
+                        UI.showLoadingWithProgress(`Preparando upload de ${pendingFiles.length} imagem(ns)...`);
+                        
+                        const results = await Upload.uploadMultiple(pendingFiles, (current, total, fileName) => {
+                            UI.showLoadingWithProgress(`Enviando ${fileName} (${current}/${total})...`);
+                        });
+                        
+                        // Processar resultados
+                        const successfulUploads = results.filter(r => r.success);
+                        const failedUploads = results.filter(r => !r.success);
+                        
+                        // Adicionar fotos bem-sucedidas
+                        successfulUploads.forEach(result => {
+                            const photo = {
+                                id: Date.now() + Math.random(),
+                                url: result.url,
+                                date: new Date().toLocaleDateString('pt-BR')
+                            };
+                            Storage.add(CONFIG.STORAGE_KEYS.PHOTOS, photo);
+                        });
+                        
+                        UI.hideLoading();
+                        
+                        // Mostrar resultado
+                        if (failedUploads.length > 0) {
+                            alert(`${successfulUploads.length} foto(s) enviada(s) com sucesso!\n${failedUploads.length} foto(s) falharam.`);
+                        } else {
+                            UI.showSuccess(`${successfulUploads.length} foto(s) adicionada(s) com sucesso! 💕`);
+                        }
+                        
                         this.renderPhotos();
                         photoUploadArea.style.display = 'none';
-                    }
+                        previewContainer.innerHTML = ''; // Limpar preview
+                        pendingFiles = []; // Limpar arquivos pendentes
+                    };
+                    previewContainer.appendChild(uploadBtn);
                 }
             });
             
@@ -265,6 +374,50 @@ const UI = (() => {
             document.getElementById('lightbox').addEventListener('click', () => {
                 document.getElementById('lightbox').classList.remove('active');
             });
+            
+            // Modal de confirmação de exclusão
+            document.getElementById('confirmDeleteBtn').addEventListener('click', () => {
+                if (itemToDelete) {
+                    const { type, id } = itemToDelete;
+                    let storageKey;
+                    
+                    switch(type) {
+                        case 'photo':
+                            storageKey = CONFIG.STORAGE_KEYS.PHOTOS;
+                            break;
+                        case 'video':
+                            storageKey = CONFIG.STORAGE_KEYS.VIDEOS;
+                            break;
+                        case 'note':
+                            storageKey = CONFIG.STORAGE_KEYS.NOTES;
+                            break;
+                    }
+                    
+                    if (storageKey) {
+                        Storage.remove(storageKey, id);
+                        this.closeDeleteModal();
+                        
+                        // Recarregar o conteúdo apropriado
+                        switch(type) {
+                            case 'photo':
+                                this.renderPhotos();
+                                break;
+                            case 'video':
+                                this.renderVideos();
+                                break;
+                            case 'note':
+                                this.renderNotes();
+                                break;
+                        }
+                        
+                        UI.showSuccess('Item removido com sucesso!');
+                    }
+                }
+            });
+            
+            document.getElementById('cancelDeleteBtn').addEventListener('click', () => {
+                this.closeDeleteModal();
+            });
         },
         
         handleLogin() {
@@ -298,7 +451,13 @@ const UI = (() => {
             switch(type) {
                 case 'photo':
                     const photoUploadArea = document.getElementById('photoUploadArea');
-                    photoUploadArea.style.display = photoUploadArea.style.display === 'none' ? 'block' : 'none';
+                    if (photoUploadArea.style.display === 'none') {
+                        photoUploadArea.style.display = 'block';
+                    } else {
+                        photoUploadArea.style.display = 'none';
+                        document.getElementById('uploadPreview').innerHTML = '';
+                        pendingFiles = [];
+                    }
                     break;
                 case 'video':
                     const videoUploadArea = document.getElementById('videoUploadArea');
@@ -338,9 +497,10 @@ const UI = (() => {
             }
             
             gallery.innerHTML = photos.map(photo => `
-                <div class="photo-item" onclick="UI.openLightbox('${photo.url}')">
-                    <img src="${photo.url}" alt="Memória" loading="lazy">
+                <div class="photo-item" data-id="${photo.id}">
+                    <img src="${photo.url}" alt="Memória" loading="lazy" onclick="UI.openLightbox('${photo.url}')">
                     <div class="photo-date">${photo.date}</div>
+                    <button class="delete-btn" onclick="event.stopPropagation(); UI.confirmDelete('photo', ${photo.id})">🗑️</button>
                 </div>
             `).join('');
         },
@@ -355,12 +515,13 @@ const UI = (() => {
             }
             
             gallery.innerHTML = videos.map(video => `
-                <div class="video-item">
+                <div class="video-item" data-id="${video.id}">
                     <iframe src="https://www.youtube.com/embed/${video.videoId}" allowfullscreen></iframe>
                     <div class="video-info">
                         <h3>${video.title}</h3>
                         <div class="video-date">${video.date}</div>
                     </div>
+                    <button class="delete-btn" onclick="UI.confirmDelete('video', ${video.id})">🗑️</button>
                 </div>
             `).join('');
         },
@@ -375,9 +536,10 @@ const UI = (() => {
             }
             
             board.innerHTML = notes.map(note => `
-                <div class="post-it" style="background-color: ${note.color}">
+                <div class="post-it" style="background-color: ${note.color}" data-id="${note.id}">
                     ${note.text}
                     <div class="post-it-date">${note.date}</div>
+                    <button class="delete-btn" onclick="UI.confirmDelete('note', ${note.id})">🗑️</button>
                 </div>
             `).join('');
         },
@@ -393,6 +555,102 @@ const UI = (() => {
         
         hideLoading() {
             document.getElementById('loading').classList.remove('active');
+        },
+        
+        showLoadingWithProgress(message) {
+            const loading = document.getElementById('loading');
+            const p = loading.querySelector('p');
+            p.textContent = message;
+            loading.classList.add('active');
+        },
+        
+        showSuccess(message) {
+            // Criar notificação temporária de sucesso
+            const notification = document.createElement('div');
+            notification.className = 'success-notification';
+            notification.textContent = message;
+            notification.style.cssText = `
+                position: fixed;
+                top: 20px;
+                left: 50%;
+                transform: translateX(-50%);
+                background: linear-gradient(135deg, #4ECDC4 0%, #44A08D 100%);
+                color: white;
+                padding: 1rem 2rem;
+                border-radius: 50px;
+                box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+                z-index: 500;
+                animation: slideDown 0.5s ease-out;
+            `;
+            
+            document.body.appendChild(notification);
+            
+            setTimeout(() => {
+                notification.style.animation = 'slideUp 0.5s ease-out';
+                setTimeout(() => notification.remove(), 500);
+            }, 3000);
+        },
+        
+        showImagePreview(files) {
+            const previewContainer = document.getElementById('uploadPreview');
+            previewContainer.innerHTML = '';
+            pendingFiles = [...files]; // Armazenar arquivos
+            
+            files.forEach((file, index) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const previewItem = document.createElement('div');
+                    previewItem.className = 'preview-item';
+                    previewItem.dataset.index = index;
+                    previewItem.innerHTML = `
+                        <img src="${e.target.result}" alt="Preview ${index + 1}">
+                        <button class="remove-btn" onclick="UI.removePreviewItem(this, ${index})">&times;</button>
+                    `;
+                    previewContainer.appendChild(previewItem);
+                };
+                reader.readAsDataURL(file);
+            });
+        },
+        
+        removePreviewItem(btn, index) {
+            btn.parentElement.remove();
+            pendingFiles = pendingFiles.filter((_, i) => i !== index);
+            
+            // Atualizar o contador no botão de upload
+            const previewContainer = document.getElementById('uploadPreview');
+            const uploadBtn = previewContainer.querySelector('.select-btn');
+            
+            if (uploadBtn && pendingFiles.length > 0) {
+                uploadBtn.textContent = `Enviar ${pendingFiles.length} foto(s)`;
+            } else if (uploadBtn && pendingFiles.length === 0) {
+                uploadBtn.remove();
+            }
+        },
+        
+        toggleEditMode(section) {
+            editMode[section] = !editMode[section];
+            const sectionElement = document.getElementById(section);
+            const editBtn = sectionElement.querySelector('.edit-btn');
+            
+            if (editMode[section]) {
+                sectionElement.classList.add('edit-mode');
+                editBtn.classList.add('active');
+                editBtn.innerHTML = '<span class="icon">✓</span> Concluído';
+            } else {
+                sectionElement.classList.remove('edit-mode');
+                editBtn.classList.remove('active');
+                editBtn.innerHTML = '<span class="icon">✏️</span> Editar';
+            }
+        },
+        
+        confirmDelete(type, id) {
+            itemToDelete = { type, id };
+            document.getElementById('deleteModal').classList.add('active');
+        },
+        
+        closeDeleteModal() {
+            document.getElementById('deleteModal').classList.remove('active');
+            itemToDelete = null;
         }
     };
 })();

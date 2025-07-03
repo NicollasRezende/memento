@@ -221,6 +221,37 @@ body {
     color: var(--dark);
 }
 
+.header-actions {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+}
+
+.edit-btn {
+    background: var(--light-gray);
+    color: var(--dark);
+    border: none;
+    padding: 0.8rem 1.5rem;
+    border-radius: 30px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: var(--transition);
+    font-weight: 600;
+    font-size: 1rem;
+}
+
+.edit-btn:hover {
+    background: var(--gray);
+    color: var(--white);
+}
+
+.edit-btn.active {
+    background: var(--primary);
+    color: var(--white);
+}
+
 .add-btn {
     background: linear-gradient(135deg, var(--secondary) 0%, var(--primary) 100%);
     color: var(--white);
@@ -295,6 +326,68 @@ body {
     transform: translateY(-2px);
 }
 
+/* Preview de upload */
+.upload-preview {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+.upload-preview:empty {
+    display: none;
+}
+
+.preview-item {
+    position: relative;
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: var(--shadow-sm);
+    animation: scaleIn 0.3s ease-out;
+}
+
+.preview-item img {
+    width: 100%;
+    height: 100px;
+    object-fit: cover;
+}
+
+.preview-item.uploading::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(255,255,255,0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.preview-item .remove-btn {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    background: var(--primary);
+    color: var(--white);
+    border: none;
+    width: 25px;
+    height: 25px;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+    opacity: 0;
+    transition: var(--transition);
+}
+
+.preview-item:hover .remove-btn {
+    opacity: 1;
+}
+
 #videoUrlInput {
     width: 100%;
     padding: 1rem;
@@ -356,6 +449,49 @@ body {
     opacity: 1;
 }
 
+/* Botão de deletar */
+.delete-btn {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: rgba(255, 107, 107, 0.9);
+    color: var(--white);
+    border: none;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    cursor: pointer;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    transition: var(--transition);
+    z-index: 10;
+}
+
+.delete-btn:hover {
+    background: rgba(255, 0, 0, 0.9);
+    transform: scale(1.1);
+}
+
+/* Modo de edição */
+.edit-mode .delete-btn {
+    display: flex;
+    animation: scaleIn 0.3s ease-out;
+}
+
+.edit-mode .photo-item,
+.edit-mode .video-item,
+.edit-mode .post-it {
+    animation: shake 0.3s ease-out;
+}
+
+@keyframes shake {
+    0%, 100% { transform: rotate(0deg); }
+    25% { transform: rotate(-1deg); }
+    75% { transform: rotate(1deg); }
+}
+
 /* === GALERIA DE VÍDEOS === */
 .video-gallery {
     display: grid;
@@ -370,6 +506,7 @@ body {
     box-shadow: var(--shadow-md);
     transition: var(--transition);
     animation: scaleIn 0.5s ease-out;
+    position: relative;
 }
 
 .video-item:hover {
@@ -395,6 +532,12 @@ body {
 .video-date {
     color: var(--gray);
     font-size: 0.9rem;
+}
+
+.video-item .delete-btn {
+    position: absolute;
+    top: 10px;
+    right: 10px;
 }
 
 /* === MURAL DE RECADINHOS === */
@@ -456,6 +599,15 @@ body {
     opacity: 0.7;
 }
 
+.post-it .delete-btn {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 35px;
+    height: 35px;
+    font-size: 1.2rem;
+}
+
 /* === MODAL === */
 .modal {
     display: none;
@@ -488,6 +640,21 @@ body {
     color: var(--primary);
     margin-bottom: 1.5rem;
     font-size: 1.5rem;
+}
+
+.delete-modal {
+    max-width: 400px;
+    text-align: center;
+}
+
+.delete-modal h3 {
+    color: var(--dark);
+    margin-bottom: 1rem;
+}
+
+.delete-modal p {
+    color: var(--gray);
+    margin-bottom: 2rem;
 }
 
 #noteText {
@@ -562,6 +729,25 @@ body {
 }
 
 #cancelNoteBtn:hover {
+    background: var(--gray);
+    color: var(--white);
+}
+
+.danger-btn {
+    background: #FF6B6B;
+    color: var(--white);
+}
+
+.danger-btn:hover {
+    background: #FF0000;
+}
+
+#cancelDeleteBtn {
+    background: var(--light-gray);
+    color: var(--gray);
+}
+
+#cancelDeleteBtn:hover {
     background: var(--gray);
     color: var(--white);
 }
@@ -665,6 +851,17 @@ body {
 }
 
 /* === ANIMAÇÕES === */
+@keyframes fadeOut {
+    from {
+        opacity: 1;
+        transform: scale(1);
+    }
+    to {
+        opacity: 0;
+        transform: scale(0.8);
+    }
+}
+
 @keyframes fadeIn {
     from {
         opacity: 0;
@@ -682,6 +879,17 @@ body {
     to {
         opacity: 1;
         transform: translateY(0);
+    }
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 1;
+        transform: translateY(0);
+    }
+    to {
+        opacity: 0;
+        transform: translateY(-30px);
     }
 }
 
@@ -786,5 +994,16 @@ body {
         flex-direction: column;
         gap: 1rem;
         text-align: center;
+    }
+    
+    .header-actions {
+        width: 100%;
+        justify-content: center;
+    }
+    
+    .edit-btn,
+    .add-btn {
+        font-size: 0.9rem;
+        padding: 0.7rem 1.2rem;
     }
 }

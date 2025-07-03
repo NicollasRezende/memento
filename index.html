@@ -42,19 +42,25 @@
         <section id="photos" class="section active">
             <div class="section-header">
                 <h2>Nossos Momentos 📸</h2>
-                <button class="add-btn" data-type="photo">
-                    <span>+</span> Adicionar Foto
-                </button>
+                <div class="header-actions">
+                    <button class="edit-btn" onclick="UI.toggleEditMode('photos')">
+                        <span class="icon">✏️</span> Editar
+                    </button>
+                    <button class="add-btn" data-type="photo">
+                        <span>+</span> Adicionar Foto
+                    </button>
+                </div>
             </div>
             
             <div class="upload-area" id="photoUploadArea" style="display: none;">
                 <div class="upload-box">
-                    <p>Arraste uma foto aqui ou clique para selecionar</p>
-                    <input type="file" id="photoInput" accept="image/*" hidden>
+                    <p>Arraste uma ou mais fotos aqui ou clique para selecionar</p>
+                    <input type="file" id="photoInput" accept="image/*" multiple hidden>
                     <button class="select-btn" onclick="document.getElementById('photoInput').click()">
-                        Escolher Foto
+                        Escolher Fotos
                     </button>
                 </div>
+                <div id="uploadPreview" class="upload-preview"></div>
             </div>
 
             <div class="gallery masonry" id="photoGallery">
@@ -66,9 +72,14 @@
         <section id="videos" class="section">
             <div class="section-header">
                 <h2>Nossos Vídeos 🎥</h2>
-                <button class="add-btn" data-type="video">
-                    <span>+</span> Adicionar Vídeo
-                </button>
+                <div class="header-actions">
+                    <button class="edit-btn" onclick="UI.toggleEditMode('videos')">
+                        <span class="icon">✏️</span> Editar
+                    </button>
+                    <button class="add-btn" data-type="video">
+                        <span>+</span> Adicionar Vídeo
+                    </button>
+                </div>
             </div>
 
             <div class="upload-area" id="videoUploadArea" style="display: none;">
@@ -88,9 +99,14 @@
         <section id="notes" class="section">
             <div class="section-header">
                 <h2>Nossos Recadinhos 💝</h2>
-                <button class="add-btn" data-type="note">
-                    <span>+</span> Novo Recadinho
-                </button>
+                <div class="header-actions">
+                    <button class="edit-btn" onclick="UI.toggleEditMode('notes')">
+                        <span class="icon">✏️</span> Editar
+                    </button>
+                    <button class="add-btn" data-type="note">
+                        <span>+</span> Novo Recadinho
+                    </button>
+                </div>
             </div>
 
             <div class="notes-board" id="notesBoard">
@@ -114,6 +130,18 @@
             <div class="modal-actions">
                 <button id="saveNoteBtn">Salvar</button>
                 <button id="cancelNoteBtn">Cancelar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de confirmação para deletar -->
+    <div id="deleteModal" class="modal">
+        <div class="modal-content delete-modal">
+            <h3>Tem certeza? 💔</h3>
+            <p>Esta memória será removida permanentemente.</p>
+            <div class="modal-actions">
+                <button id="confirmDeleteBtn" class="danger-btn">Sim, remover</button>
+                <button id="cancelDeleteBtn">Cancelar</button>
             </div>
         </div>
     </div>

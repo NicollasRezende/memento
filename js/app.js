@@ -1,13 +1,9 @@
 // === CONFIGURAÇÕES === //
 const CONFIG = {
     PIN: '1234', // MUDE PARA O CÓDIGO QUE VOCÊS QUISEREM!
-    IMGBB_API_KEY: 'bcfb741e6d085a2d8e0df6eafc8d2101', // Substitua pela sua chave da API ImgBB
-    STORAGE_KEYS: {
-        AUTH: 'memories_auth',
-        PHOTOS: 'memories_photos',
-        VIDEOS: 'memories_videos',
-        NOTES: 'memories_notes'
-    }
+    IMGBB_API_KEY: 'bcfb741e6d085a2d8e0df6eafc8d2101',
+    JSONBIN_ID: '6865e4158960c979a5b625d3', // Seu Bin ID configurado!
+    JSONBIN_API_KEY: '$2a$10$7ozl6h9dI3zUv10Q7qtMgOWU9jQrZo4vrEUS7LK2rSUJ7izH1VXFm'
 };
 
 // === MÓDULO DE AUTENTICAÇÃO === //
@@ -18,45 +14,148 @@ const Auth = (() => {
         login(pin) {
             if (pin === CONFIG.PIN) {
                 const token = btoa(Date.now() + Math.random());
-                localStorage.setItem(CONFIG.STORAGE_KEYS.AUTH, token);
+                localStorage.setItem('memories_auth', token);
                 return true;
             }
             return false;
         },
         
         logout() {
-            localStorage.removeItem(CONFIG.STORAGE_KEYS.AUTH);
+            localStorage.removeItem('memories_auth');
             location.reload();
         },
         
         isAuthenticated() {
-            return localStorage.getItem(CONFIG.STORAGE_KEYS.AUTH) !== null;
+            return localStorage.getItem('memories_auth') !== null;
         }
     };
 })();
 
-// === MÓDULO DE ARMAZENAMENTO === //
+// === MÓDULO DE ARMAZENAMENTO (JSONBIN) === //
 const Storage = (() => {
+    const BASE_URL = `https://api.jsonbin.io/v3/b/${CONFIG.JSONBIN_ID}`;
+    
+    let cache = {
+        photos: [],
+        videos: [],
+        notes: []
+    };
+    
+    let pollInterval = null;
+    let updateCallbacks = {
+        photos: null,
+        videos: null,
+        notes: null
+    };
+    
+    const fetchData = async () => {
+        try {
+            const response = await fetch(BASE_URL + '/latest', {
+                headers: {
+                    'X-Master-Key': CONFIG.JSONBIN_API_KEY
+                }
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                const newCache = data.record;
+                
+                // Verificar se houve mudanças e notificar
+                if (JSON.stringify(cache) !== JSON.stringify(newCache)) {
+                    cache = newCache;
+                    
+                    // Notificar os callbacks se houver mudanças
+                    if (updateCallbacks.photos) {
+                        updateCallbacks.photos(cache.photos || []);
+                    }
+                    if (updateCallbacks.videos) {
+                        updateCallbacks.videos(cache.videos || []);
+                    }
+                    if (updateCallbacks.notes) {
+                        updateCallbacks.notes(cache.notes || []);
+                    }
+                }
+                
+                return cache;
+            }
+        } catch (error) {
+            console.error('Erro ao buscar dados:', error);
+        }
+        return cache;
+    };
+    
+    const saveData = async () => {
+        try {
+            const response = await fetch(BASE_URL, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Master-Key': CONFIG.JSONBIN_API_KEY
+                },
+                body: JSON.stringify(cache)
+            });
+            
+            if (!response.ok) {
+                throw new Error('Erro ao salvar');
+            }
+            
+            // Forçar atualização após salvar
+            setTimeout(() => fetchData(), 1000);
+            
+        } catch (error) {
+            console.error('Erro ao salvar:', error);
+            throw error;
+        }
+    };
+    
     return {
-        get(key) {
-            const data = localStorage.getItem(key);
-            return data ? JSON.parse(data) : [];
+        async get(type) {
+            await fetchData();
+            return cache[type] || [];
         },
         
-        save(key, data) {
-            localStorage.setItem(key, JSON.stringify(data));
+        async add(type, item) {
+            item.id = Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+            item.timestamp = Date.now();
+            
+            await fetchData(); // Pegar dados mais recentes
+            
+            if (!cache[type]) {
+                cache[type] = [];
+            }
+            
+            cache[type].unshift(item); // Adicionar no início
+            await saveData();
+            
+            return item;
         },
         
-        add(key, item) {
-            const items = this.get(key);
-            items.unshift(item);
-            this.save(key, items);
+        async remove(type, id) {
+            await fetchData();
+            
+            if (cache[type]) {
+                cache[type] = cache[type].filter(item => item.id !== id);
+                await saveData();
+            }
         },
         
-        remove(key, id) {
-            const items = this.get(key);
-            const filtered = items.filter(item => item.id !== id);
-            this.save(key, filtered);
+        startPolling(callbacks) {
+            updateCallbacks = callbacks;
+            
+            // Buscar dados imediatamente
+            fetchData();
+            
+            // Sincronizar a cada 3 segundos
+            pollInterval = setInterval(() => {
+                fetchData();
+            }, 3000);
+        },
+        
+        stopPolling() {
+            if (pollInterval) {
+                clearInterval(pollInterval);
+                pollInterval = null;
+            }
         }
     };
 })();
@@ -124,7 +223,7 @@ const Upload = (() => {
 const UI = (() => {
     let currentSection = 'photos';
     let selectedNoteColor = '#FFE5B4';
-    let pendingFiles = []; // Armazenar arquivos pendentes
+    let pendingFiles = [];
     let editMode = {
         photos: false,
         videos: false,
@@ -142,8 +241,17 @@ const UI = (() => {
             if (Auth.isAuthenticated()) {
                 document.getElementById('loginScreen').classList.remove('active');
                 document.getElementById('app').classList.add('active');
+                this.startListeners();
                 this.loadContent();
             }
+        },
+        
+        startListeners() {
+            Storage.startPolling({
+                photos: (photos) => this.renderPhotosFromData(photos),
+                videos: (videos) => this.renderVideosFromData(videos),
+                notes: (notes) => this.renderNotesFromData(notes)
+            });
         },
         
         bindEvents() {
@@ -156,6 +264,7 @@ const UI = (() => {
             // Logout
             document.getElementById('logoutBtn').addEventListener('click', () => {
                 if (confirm('Tem certeza que deseja sair?')) {
+                    Storage.stopPolling();
                     Auth.logout();
                 }
             });
@@ -183,14 +292,11 @@ const UI = (() => {
                 const files = Array.from(e.target.files);
                 if (files.length === 0) return;
                 
-                // Filtrar apenas imagens
                 const imageFiles = files.filter(file => file.type.startsWith('image/'));
                 
                 if (imageFiles.length > 0) {
-                    // Mostrar preview
                     UI.showImagePreview(imageFiles);
                     
-                    // Adicionar botão de upload
                     const previewContainer = document.getElementById('uploadPreview');
                     const uploadBtn = document.createElement('button');
                     uploadBtn.className = 'select-btn';
@@ -206,34 +312,33 @@ const UI = (() => {
                             UI.showLoadingWithProgress(`Enviando ${fileName} (${current}/${total})...`);
                         });
                         
-                        // Processar resultados
                         const successfulUploads = results.filter(r => r.success);
                         const failedUploads = results.filter(r => !r.success);
                         
-                        // Adicionar fotos bem-sucedidas
-                        successfulUploads.forEach(result => {
-                            const photo = {
-                                id: Date.now() + Math.random(),
-                                url: result.url,
-                                date: new Date().toLocaleDateString('pt-BR')
-                            };
-                            Storage.add(CONFIG.STORAGE_KEYS.PHOTOS, photo);
-                        });
+                        // Adicionar fotos ao JSONBin
+                        for (const result of successfulUploads) {
+                            try {
+                                await Storage.add('photos', {
+                                    url: result.url,
+                                    date: new Date().toLocaleDateString('pt-BR')
+                                });
+                            } catch (error) {
+                                console.error('Erro ao salvar:', error);
+                            }
+                        }
                         
                         UI.hideLoading();
                         
-                        // Mostrar resultado
                         if (failedUploads.length > 0) {
                             alert(`${successfulUploads.length} foto(s) enviada(s) com sucesso!\n${failedUploads.length} foto(s) falharam.`);
                         } else {
                             UI.showSuccess(`${successfulUploads.length} foto(s) adicionada(s) com sucesso! 💕`);
                         }
                         
-                        this.renderPhotos();
                         photoUploadArea.style.display = 'none';
-                        photoInput.value = ''; // Limpar input
-                        previewContainer.innerHTML = ''; // Limpar preview
-                        pendingFiles = []; // Limpar arquivos pendentes
+                        photoInput.value = '';
+                        previewContainer.innerHTML = '';
+                        pendingFiles = [];
                     };
                     previewContainer.appendChild(uploadBtn);
                 }
@@ -259,10 +364,8 @@ const UI = (() => {
                 const imageFiles = files.filter(file => file.type.startsWith('image/'));
                 
                 if (imageFiles.length > 0) {
-                    // Mostrar preview
                     UI.showImagePreview(imageFiles);
                     
-                    // Adicionar botão de upload
                     const previewContainer = document.getElementById('uploadPreview');
                     const uploadBtn = document.createElement('button');
                     uploadBtn.className = 'select-btn';
@@ -278,45 +381,42 @@ const UI = (() => {
                             UI.showLoadingWithProgress(`Enviando ${fileName} (${current}/${total})...`);
                         });
                         
-                        // Processar resultados
                         const successfulUploads = results.filter(r => r.success);
                         const failedUploads = results.filter(r => !r.success);
                         
-                        // Adicionar fotos bem-sucedidas
-                        successfulUploads.forEach(result => {
-                            const photo = {
-                                id: Date.now() + Math.random(),
-                                url: result.url,
-                                date: new Date().toLocaleDateString('pt-BR')
-                            };
-                            Storage.add(CONFIG.STORAGE_KEYS.PHOTOS, photo);
-                        });
+                        for (const result of successfulUploads) {
+                            try {
+                                await Storage.add('photos', {
+                                    url: result.url,
+                                    date: new Date().toLocaleDateString('pt-BR')
+                                });
+                            } catch (error) {
+                                console.error('Erro ao salvar:', error);
+                            }
+                        }
                         
                         UI.hideLoading();
                         
-                        // Mostrar resultado
                         if (failedUploads.length > 0) {
                             alert(`${successfulUploads.length} foto(s) enviada(s) com sucesso!\n${failedUploads.length} foto(s) falharam.`);
                         } else {
                             UI.showSuccess(`${successfulUploads.length} foto(s) adicionada(s) com sucesso! 💕`);
                         }
                         
-                        this.renderPhotos();
                         photoUploadArea.style.display = 'none';
-                        previewContainer.innerHTML = ''; // Limpar preview
-                        pendingFiles = []; // Limpar arquivos pendentes
+                        previewContainer.innerHTML = '';
+                        pendingFiles = [];
                     };
                     previewContainer.appendChild(uploadBtn);
                 }
             });
             
             // Adicionar vídeo
-            document.getElementById('addVideoBtn').addEventListener('click', () => {
+            document.getElementById('addVideoBtn').addEventListener('click', async () => {
                 const urlInput = document.getElementById('videoUrlInput');
                 const url = urlInput.value.trim();
                 
                 if (url) {
-                    // Extrair ID do YouTube
                     let videoId = '';
                     if (url.includes('youtube.com/watch?v=')) {
                         videoId = url.split('v=')[1].split('&')[0];
@@ -325,16 +425,22 @@ const UI = (() => {
                     }
                     
                     if (videoId) {
-                        const video = {
-                            id: Date.now(),
-                            videoId: videoId,
-                            title: 'Nosso vídeo',
-                            date: new Date().toLocaleDateString('pt-BR')
-                        };
-                        Storage.add(CONFIG.STORAGE_KEYS.VIDEOS, video);
-                        this.renderVideos();
-                        urlInput.value = '';
-                        document.getElementById('videoUploadArea').style.display = 'none';
+                        try {
+                            UI.showLoading();
+                            await Storage.add('videos', {
+                                videoId: videoId,
+                                title: 'Nosso vídeo',
+                                date: new Date().toLocaleDateString('pt-BR')
+                            });
+                            
+                            UI.hideLoading();
+                            UI.showSuccess('Vídeo adicionado com sucesso! 🎥');
+                            urlInput.value = '';
+                            document.getElementById('videoUploadArea').style.display = 'none';
+                        } catch (error) {
+                            UI.hideLoading();
+                            alert('Erro ao adicionar vídeo. Tente novamente!');
+                        }
                     } else {
                         alert('Por favor, insira um link válido do YouTube!');
                     }
@@ -342,18 +448,24 @@ const UI = (() => {
             });
             
             // Modal de recadinhos
-            document.getElementById('saveNoteBtn').addEventListener('click', () => {
+            document.getElementById('saveNoteBtn').addEventListener('click', async () => {
                 const text = document.getElementById('noteText').value.trim();
                 if (text) {
-                    const note = {
-                        id: Date.now(),
-                        text: text,
-                        color: selectedNoteColor,
-                        date: new Date().toLocaleDateString('pt-BR')
-                    };
-                    Storage.add(CONFIG.STORAGE_KEYS.NOTES, note);
-                    this.renderNotes();
-                    this.closeNoteModal();
+                    try {
+                        UI.showLoading();
+                        await Storage.add('notes', {
+                            text: text,
+                            color: selectedNoteColor,
+                            date: new Date().toLocaleDateString('pt-BR')
+                        });
+                        
+                        UI.hideLoading();
+                        UI.showSuccess('Recadinho adicionado! 💝');
+                        this.closeNoteModal();
+                    } catch (error) {
+                        UI.hideLoading();
+                        alert('Erro ao salvar recadinho. Tente novamente!');
+                    }
                 }
             });
             
@@ -376,41 +488,19 @@ const UI = (() => {
             });
             
             // Modal de confirmação de exclusão
-            document.getElementById('confirmDeleteBtn').addEventListener('click', () => {
+            document.getElementById('confirmDeleteBtn').addEventListener('click', async () => {
                 if (itemToDelete) {
                     const { type, id } = itemToDelete;
-                    let storageKey;
                     
-                    switch(type) {
-                        case 'photo':
-                            storageKey = CONFIG.STORAGE_KEYS.PHOTOS;
-                            break;
-                        case 'video':
-                            storageKey = CONFIG.STORAGE_KEYS.VIDEOS;
-                            break;
-                        case 'note':
-                            storageKey = CONFIG.STORAGE_KEYS.NOTES;
-                            break;
-                    }
-                    
-                    if (storageKey) {
-                        Storage.remove(storageKey, id);
+                    try {
+                        UI.showLoading();
+                        await Storage.remove(type, id);
+                        UI.hideLoading();
                         this.closeDeleteModal();
-                        
-                        // Recarregar o conteúdo apropriado
-                        switch(type) {
-                            case 'photo':
-                                this.renderPhotos();
-                                break;
-                            case 'video':
-                                this.renderVideos();
-                                break;
-                            case 'note':
-                                this.renderNotes();
-                                break;
-                        }
-                        
                         UI.showSuccess('Item removido com sucesso!');
+                    } catch (error) {
+                        UI.hideLoading();
+                        alert('Erro ao remover item. Tente novamente!');
                     }
                 }
             });
@@ -425,6 +515,7 @@ const UI = (() => {
             if (Auth.login(pin)) {
                 document.getElementById('loginScreen').classList.remove('active');
                 document.getElementById('app').classList.add('active');
+                UI.startListeners();
                 UI.loadContent();
             } else {
                 alert('Código incorreto! Tente novamente 💔');
@@ -436,12 +527,10 @@ const UI = (() => {
         switchSection(section) {
             currentSection = section;
             
-            // Atualizar navegação
             document.querySelectorAll('.nav-link').forEach(link => {
                 link.classList.toggle('active', link.dataset.section === section);
             });
             
-            // Mostrar seção
             document.querySelectorAll('.section').forEach(sec => {
                 sec.classList.toggle('active', sec.id === section);
             });
@@ -474,45 +563,62 @@ const UI = (() => {
             document.getElementById('noteModal').classList.add('active');
             document.getElementById('noteText').value = '';
             document.getElementById('noteText').focus();
-            document.querySelector('.color').click(); // Selecionar primeira cor
+            document.querySelector('.color').click();
         },
         
         closeNoteModal() {
             document.getElementById('noteModal').classList.remove('active');
         },
         
-        loadContent() {
-            this.renderPhotos();
-            this.renderVideos();
-            this.renderNotes();
+        async loadContent() {
+            try {
+                const photos = await Storage.get('photos');
+                const videos = await Storage.get('videos');
+                const notes = await Storage.get('notes');
+                
+                this.renderPhotosFromData(photos);
+                this.renderVideosFromData(videos);
+                this.renderNotesFromData(notes);
+            } catch (error) {
+                console.error('Erro ao carregar conteúdo:', error);
+            }
         },
         
-        renderPhotos() {
-            const photos = Storage.get(CONFIG.STORAGE_KEYS.PHOTOS);
+        renderPhotosFromData(photos) {
             const gallery = document.getElementById('photoGallery');
+            const isEditMode = editMode.photos;
             
-            if (photos.length === 0) {
+            if (!photos || photos.length === 0) {
                 gallery.innerHTML = '<p style="text-align: center; color: #999; grid-column: 1/-1;">Nenhuma foto ainda... Adicione a primeira! 📸</p>';
                 return;
             }
+            
+            // Ordenar por timestamp (mais recente primeiro)
+            photos.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
             
             gallery.innerHTML = photos.map(photo => `
                 <div class="photo-item" data-id="${photo.id}">
                     <img src="${photo.url}" alt="Memória" loading="lazy" onclick="UI.openLightbox('${photo.url}')">
                     <div class="photo-date">${photo.date}</div>
-                    <button class="delete-btn" onclick="event.stopPropagation(); UI.confirmDelete('photo', ${photo.id})">🗑️</button>
+                    <button class="delete-btn" onclick="event.stopPropagation(); UI.confirmDelete('photos', '${photo.id}')">🗑️</button>
                 </div>
             `).join('');
+            
+            if (isEditMode) {
+                document.getElementById('photos').classList.add('edit-mode');
+            }
         },
         
-        renderVideos() {
-            const videos = Storage.get(CONFIG.STORAGE_KEYS.VIDEOS);
+        renderVideosFromData(videos) {
             const gallery = document.getElementById('videoGallery');
+            const isEditMode = editMode.videos;
             
-            if (videos.length === 0) {
+            if (!videos || videos.length === 0) {
                 gallery.innerHTML = '<p style="text-align: center; color: #999;">Nenhum vídeo ainda... Adicione o primeiro! 🎥</p>';
                 return;
             }
+            
+            videos.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
             
             gallery.innerHTML = videos.map(video => `
                 <div class="video-item" data-id="${video.id}">
@@ -521,27 +627,37 @@ const UI = (() => {
                         <h3>${video.title}</h3>
                         <div class="video-date">${video.date}</div>
                     </div>
-                    <button class="delete-btn" onclick="UI.confirmDelete('video', ${video.id})">🗑️</button>
+                    <button class="delete-btn" onclick="UI.confirmDelete('videos', '${video.id}')">🗑️</button>
                 </div>
             `).join('');
+            
+            if (isEditMode) {
+                document.getElementById('videos').classList.add('edit-mode');
+            }
         },
         
-        renderNotes() {
-            const notes = Storage.get(CONFIG.STORAGE_KEYS.NOTES);
+        renderNotesFromData(notes) {
             const board = document.getElementById('notesBoard');
+            const isEditMode = editMode.notes;
             
-            if (notes.length === 0) {
+            if (!notes || notes.length === 0) {
                 board.innerHTML = '<p style="text-align: center; color: #999; grid-column: 1/-1;">Nenhum recadinho ainda... Deixe o primeiro! 💝</p>';
                 return;
             }
+            
+            notes.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
             
             board.innerHTML = notes.map(note => `
                 <div class="post-it" style="background-color: ${note.color}" data-id="${note.id}">
                     ${note.text}
                     <div class="post-it-date">${note.date}</div>
-                    <button class="delete-btn" onclick="UI.confirmDelete('note', ${note.id})">🗑️</button>
+                    <button class="delete-btn" onclick="UI.confirmDelete('notes', '${note.id}')">🗑️</button>
                 </div>
             `).join('');
+            
+            if (isEditMode) {
+                document.getElementById('notes').classList.add('edit-mode');
+            }
         },
         
         openLightbox(url) {
@@ -565,7 +681,6 @@ const UI = (() => {
         },
         
         showSuccess(message) {
-            // Criar notificação temporária de sucesso
             const notification = document.createElement('div');
             notification.className = 'success-notification';
             notification.textContent = message;
@@ -594,7 +709,7 @@ const UI = (() => {
         showImagePreview(files) {
             const previewContainer = document.getElementById('uploadPreview');
             previewContainer.innerHTML = '';
-            pendingFiles = [...files]; // Armazenar arquivos
+            pendingFiles = [...files];
             
             files.forEach((file, index) => {
                 const reader = new FileReader();
@@ -616,7 +731,6 @@ const UI = (() => {
             btn.parentElement.remove();
             pendingFiles = pendingFiles.filter((_, i) => i !== index);
             
-            // Atualizar o contador no botão de upload
             const previewContainer = document.getElementById('uploadPreview');
             const uploadBtn = previewContainer.querySelector('.select-btn');
             
